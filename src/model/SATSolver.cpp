@@ -14,6 +14,11 @@ SATSolver::SATSolver(shared_ptr<Model> model, int slv_kind) {
         m_slv = make_shared<CadicalSolver>(m_model);
         break;
 #endif
+#ifdef KISSAT
+    case 2:
+        m_slv = make_shared<KissatSolver>(m_model);
+        break;
+#endif
     default:
         assert(false);
         break;

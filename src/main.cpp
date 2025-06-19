@@ -15,7 +15,7 @@ void PrintUsage() {
     cout << "Configs:" << endl;
     cout << "   -f | -b             forward | backward CAR" << endl;
     cout << "   -bmc                BMC" << endl;
-    cout << "   -slv                Solver (1: minisat 2: CaDiCaL)" << endl;
+    cout << "   -slv n                Solver (1: minisat 2: CaDiCaL 3: Kissat (BMC ONLY))" << endl;
     cout << "   -br n               branching (1: sum 2: VSIDS 3: ACIDS 0: static)" << endl;
     cout << "   -rs                 refer-skipping" << endl;
     cout << "   -is                 internal signals" << endl;
@@ -74,9 +74,15 @@ Settings GetArgv(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     Settings settings = GetArgv(argc, argv);
+    
     shared_ptr<Log> log(new Log(settings.verbosity));
     shared_ptr<Model> aigerModel(new Model(settings));
     log->StatInit();
+    if (settings.solver == 3 && !settings.bmc) //check kissat usage for BMC only!
+    {
+        log->L (0, "Kissat is used only for BMC!"); 
+        exit (0);
+    }
     shared_ptr<BaseChecker> checker;
     if (settings.forward) {
         checker = make_shared<ForwardChecker>(settings, aigerModel, log);

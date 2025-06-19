@@ -5,6 +5,8 @@
 #include "Log.h"
 #include "SATSolver.h"
 
+#define KISSATENABLE (m_settings.solver==2)
+
 namespace car {
 
 class BMC : public BaseChecker {
@@ -25,6 +27,9 @@ class BMC : public BaseChecker {
     shared_ptr<State> m_initialState;
     int m_badId;
     shared_ptr<SATSolver> m_Solver;
+
+    //for kissat to store clauses from previous unrolling
+    shared_ptr<vector<clause>> m_clauses;
 
     void Init(int badId);
     void OutputCounterExample(int bad);
