@@ -5,7 +5,7 @@
 #include "Log.h"
 #include "SATSolver.h"
 
-#define KISSATENABLE (m_settings.solver==2)
+#define KISSATENABLE (m_settings.solver==3)
 
 namespace car {
 
