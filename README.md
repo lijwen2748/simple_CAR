@@ -6,7 +6,7 @@
 
 `cd simple_CAR/src/sat/cadical/`
 
-`./configure && make`
+`./configure --competition && make`
 
 `cd ../../../..`
 
@@ -14,7 +14,7 @@
 
 `cd simple_CAR/src/sat/kissat/`
 
-`./configure && make`
+`./configure --competition && make`
 
 `cd ../../../..`
 
