@@ -9,14 +9,20 @@ BMC::BMC(Settings settings, shared_ptr<Model> model, shared_ptr<Log> log)
     GLOBAL_LOG = m_log;
     m_k = 0;
     m_maxK = m_settings.bmc_k;
+    m_per_K = m_settings.bmc_per_k;
     m_clauses = make_shared<vector<clause>>();
 }
 
 bool BMC::Run() {
     signal(SIGINT, signalHandler);
 
-    bool result = Check(m_model->GetBad());
+    bool result = false;
 
+    if (KISSATENABLE) {
+        result = check_nonincremental(m_model->GetBad());
+    } else {
+        result = Check(m_model->GetBad());
+    }
     m_log->PrintStatistics();
     if (result) {
         m_log->L(0, "Unsafe");
@@ -30,23 +36,10 @@ bool BMC::Run() {
 }
 
 bool BMC::Check(int badId) {
-    if (!KISSATENABLE) // not using Kissat
-        Init(badId);
+    Init(badId);
 
     while (true) {
-        if (KISSATENABLE) // using Kissat
-            Init(badId);
-
         m_log->L(1, "BMC Bound: ", m_k);
-
-        if (KISSATENABLE) {
-            // add clauses before K unrollings to the Kissat solver
-            for (int i = 0; i < m_clauses->size(); ++i) {
-                m_Solver->AddClause(m_clauses->at(i));
-                m_log->L( 
-                    3, "Add Clause: ", CubeToStr(make_shared<cube>(m_clauses->at(i))));
-            }
-        }
 
         shared_ptr<vector<clause>> clauses = make_shared<vector<clause>>();
         GetClausesK(m_k, clauses);
@@ -54,54 +47,97 @@ bool BMC::Check(int badId) {
         // & T^k
         for (int i = 0; i < clauses->size(); ++i) {
             m_Solver->AddClause(clauses->at(i));
-            m_clauses->emplace_back(clauses->at(i)); // store for further use
             m_log->L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
         }
 
+        // assume( bad^k & cons^k )
         int k_bad = GetBadK(m_k);
         shared_ptr<cube> assumptions(new cube());
+        assumptions->push_back(k_bad);
+        for (auto c : GetConstraintsK(m_k)) {
+            assumptions->push_back(c);
+        }
+        m_log->L(3, "Assumption: ", CubeToStr(assumptions));
+        m_log->Tick();
+        bool sat = m_Solver->Solve(assumptions);
+        m_log->StatMainSolver();
+        if (sat) return true;
 
-        if (KISSATENABLE) { // for kissat, directly add bad^k and cons^k
-            m_Solver->AddClause({k_bad});
+        // & cons^k
+        for (auto c : GetConstraintsK(m_k)) {
+            m_Solver->AddClause({c});
+            m_log->L(3, "Add Clause: ", c);
+        }
+        // & !bad^k
+        m_Solver->AddClause({-k_bad});
+        m_log->L(3, "Add Clause: ", -k_bad);
+        m_k++;
+        if (m_maxK != -1 && m_k > m_maxK) return false;
+    }
+}
+
+bool BMC::check_nonincremental(int badId) {
+
+    // before clause^k ConstraintsK(k) bad^k
+
+    // before clause^k clause^(k+1) clause^(k+2) ConstraintsK(k) ConstraintsK(k+1) ConstraintsK(k+2) (bad^(k)|bad^(k+1)|bad^(k+2))
+
+    // before clause^k clause^(k+1) clause^(k+2) ConstraintsK(k) ConstraintsK(k+1) ConstraintsK(k+2) (bad^(k+2))
+
+    while (true) {
+        Init(badId);
+        // add clauses before K unrollings to the Kissat solver
+        for (int i = 0; i < m_clauses->size(); ++i) {
+            m_Solver->AddClause(m_clauses->at(i));
+            m_log->L(
+                3, "Add Clause: ", CubeToStr(make_shared<cube>(m_clauses->at(i))));
+        }
+        clause badClause;
+        for (int s = 0; s < m_per_K; s++) {
+            m_log->L(1, "BMC Bound: ", m_k);
+
+            shared_ptr<vector<clause>> clauses = make_shared<vector<clause>>();
+            GetClausesK(m_k, clauses);
+
+            // & T^k
+            for (int i = 0; i < clauses->size(); ++i) {
+                m_Solver->AddClause(clauses->at(i));
+                m_clauses->emplace_back(clauses->at(i)); // store for further use
+                m_log->L(3, "Add Clause: ", CubeToStr(make_shared<cube>(clauses->at(i))));
+            }
+
+            int k_bad = GetBadK(m_k);
+
+            badClause.push_back({k_bad});
+            // m_Solver->AddClause({k_bad});
             m_log->L(3, "Add Clause: ", k_bad);
             for (auto c : GetConstraintsK(m_k)) {
                 m_Solver->AddClause({c});
                 m_clauses->push_back({c}); // store for further use
                 m_log->L(3, "Add Clause: ", c);
             }
-        } else {
-            // assume( bad^k & cons^k )
 
-            assumptions->push_back(k_bad);
-            for (auto c : GetConstraintsK(m_k)) {
-                assumptions->push_back(c);
+            clause cl({-k_bad}); // store bad^k for
+            m_clauses->emplace_back(cl);
+
+            m_k++;
+            if (m_maxK != -1 && m_k > m_maxK) {
+                m_Solver->AddClause(badClause);
+                m_log->Tick();
+                bool sat = m_Solver->Solve();
+                m_log->StatMainSolver();
+                if (sat)
+                    return true;
+                else
+                    return false;
             }
-            m_log->L(3, "Assumption: ", CubeToStr(assumptions));
         }
-
+        m_Solver->AddClause(badClause);
         m_log->Tick();
-        bool sat = KISSATENABLE ? m_Solver->Solve() : m_Solver->Solve(assumptions);
+        bool sat = m_Solver->Solve();
         m_log->StatMainSolver();
         if (sat)
             return true;
-
-        if (!KISSATENABLE) {
-            // & cons^k
-            for (auto c : GetConstraintsK(m_k)) {
-                m_Solver->AddClause({c});
-                m_log->L(3, "Add Clause: ", c);
-            }
-            // & !bad^k
-            m_Solver->AddClause({-k_bad});
-            m_log->L(3, "Add Clause: ", -k_bad);
-        } else { // for kissat
-            clause cl({-k_bad});
-            m_clauses->emplace_back(cl);
-        }
-
-        m_k++;
-        if (m_maxK != -1 && m_k > m_maxK)
-            return false;
     }
 }
 

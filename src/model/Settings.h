@@ -21,6 +21,7 @@ struct Settings {
     int verbosity = 0;
     bool internalSignals = false;
     int solver = 0;
+    int bmc_per_k = 1;
     string aigFilePath;
     string outputDir;
 };

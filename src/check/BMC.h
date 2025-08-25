@@ -17,6 +17,7 @@ class BMC : public BaseChecker {
 
     bool Run();
     bool Check(int badId);
+    bool check_nonincremental(int badId);
 
   private:
     Settings m_settings;
@@ -24,6 +25,7 @@ class BMC : public BaseChecker {
     shared_ptr<Model> m_model;
     int m_k;
     int m_maxK;
+    int m_per_K;
     shared_ptr<State> m_initialState;
     int m_badId;
     shared_ptr<SATSolver> m_Solver;

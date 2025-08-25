@@ -43,6 +43,9 @@ Settings GetArgv(int argc, char **argv) {
         } else if (strcmp(argv[i], "-slv") == 0) {
             settings.solver = atoi(argv[i + 1]);
             i++;
+        } else if (strcmp(argv[i], "-pk") == 0) {
+            settings.bmc_per_k = atoi(argv[i + 1]);
+            i++;
         } else if (strcmp(argv[i], "-br") == 0) {
             settings.Branching = atoi(argv[i + 1]);
             i++;
@@ -74,14 +77,14 @@ Settings GetArgv(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     Settings settings = GetArgv(argc, argv);
-    
+
     shared_ptr<Log> log(new Log(settings.verbosity));
     shared_ptr<Model> aigerModel(new Model(settings));
     log->StatInit();
-    if (settings.solver == 3 && !settings.bmc) //check kissat usage for BMC only!
+    if (settings.solver == 3 && !settings.bmc) // check kissat usage for BMC only!
     {
-        log->L (0, "Kissat is used only for BMC!"); 
-        exit (0);
+        log->L(0, "Kissat is used only for BMC!");
+        exit(0);
     }
     shared_ptr<BaseChecker> checker;
     if (settings.forward) {
